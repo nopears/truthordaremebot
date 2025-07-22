@@ -9,11 +9,14 @@ const adminId = Number(process.env.ADMIN_ID)
 const adminService = new AdminService()
 const groupService = new GroupService()
 
+// Передаем экземпляр бота в GroupService
+groupService.setBotInstance(bot)
+
 bot.on("message", async (ctx) => {
-  // Только личные сообщения
+  // Only private messages
   if (ctx.chat.type !== "private") return
 
-  // Если не админ
+  // If not admin
   if (ctx.from?.id !== adminId) {
     return ctx.reply(
       'Этот бот — игра "Правда или Действие". Добавьте его в группу и используйте /truth или /dare 🎲',
@@ -64,7 +67,7 @@ bot.on("message", async (ctx) => {
         if (!id || !newText) return ctx.reply("❌ Укажите ID и новый текст")
         await adminService.editDare(id, newText)
         return ctx.reply('✅ Обновлено в "Действиях"')
-        
+
       case "/list_groups":
         const groups = await groupService.listGroups()
         if (groups.length === 0) {
@@ -76,9 +79,33 @@ bot.on("message", async (ctx) => {
         }).join("\n\n")
         return ctx.reply(`📊 Список групп (${groups.length}):\n\n${groupsList}`)
 
+      case "/broadcast":
+        if (!argText) {
+          return ctx.reply("❌ Введите текст сообщения для рассылки")
+        }
+
+        await ctx.reply("🔄 Начинаю рассылку сообщения во все группы...")
+
+        try {
+          const results = await groupService.broadcastMessage(argText, { parse_mode: "Markdown" })
+
+          return ctx.reply(
+            `✅ Рассылка завершена!\n\n` +
+            `📊 Статистика:\n` +
+            `✓ Успешно отправлено: ${results.successful}\n` +
+            `✗ Ошибок: ${results.failed}\n\n` +
+            (results.errors.length > 0
+              ? `❌ Ошибки:\n${results.errors.map(e => `- Группа ${e.groupId}: ${e.error}`).join('\n')}`
+              : '')
+          )
+        } catch (error) {
+          console.error("Error during broadcast:", error)
+          return ctx.reply(`❌ Ошибка при рассылке: ${error instanceof Error ? error.message : String(error)}`)
+        }
+
       default:
         return ctx.reply(
-          "⚙ Команды:\n/list_truth\n/add_truth <текст>\n/edit_truth <id> <текст>\n/del_truth <id>\n\n/list_dare\n/add_dare <текст>\n/edit_dare <id> <текст>\n/del_dare <id>\n\n/list_groups - список групп",
+          "⚙ Команды:\n/list_truth\n/add_truth <текст>\n/edit_truth <id> <текст>\n/del_truth <id>\n\n/list_dare\n/add_dare <текст>\n/edit_dare <id> <текст>\n/del_dare <id>\n\n/list_groups - список групп\n/broadcast <текст> - отправить сообщение во все группы",
         )
     }
   } catch (e) {
@@ -87,23 +114,23 @@ bot.on("message", async (ctx) => {
   }
 })
 
-// Приветствие при добавлении в группу и обработка добавления/удаления бота из группы
+// Welcome message when adding to a group and handling bot addition/removal from a group
 bot.on("my_chat_member", async (ctx) => {
   const update = ctx.update.my_chat_member
   const newStatus = update.new_chat_member.status
   const oldStatus = update.old_chat_member.status
   const chatId = update.chat.id.toString()
 
-  // Если бота добавили в группу
+  // If the bot was added to a group
   if (
     (oldStatus === "kicked" || oldStatus === "left") &&
     (newStatus === "member" || newStatus === "administrator")
   ) {
     try {
-      // Сохраняем ID группы в базу данных
+      // Save the group ID to the database
       await groupService.addGroup(chatId)
-      console.log(`Бот добавлен в группу ${chatId}`)
-      
+      console.log(`Bot added to group ${chatId}`)
+
       await ctx.reply(
         `👋 Привет! Я *бот "Правда или Действие"*.
 
@@ -115,21 +142,21 @@ bot.on("my_chat_member", async (ctx) => {
         { parse_mode: "Markdown" },
       )
     } catch (error) {
-      console.error(`Ошибка при добавлении группы ${chatId} в БД:`, error)
+      console.error(`Error adding group ${chatId} to database:`, error)
     }
   }
-  
-  // Если бота удалили из группы
+
+  // If the bot was removed from a group
   else if (
     (oldStatus === "member" || oldStatus === "administrator") &&
     (newStatus === "kicked" || newStatus === "left")
   ) {
     try {
-      // Удаляем ID группы из базы данных
+      // Remove the group ID from the database
       await groupService.removeGroup(chatId)
-      console.log(`Бот удален из группы ${chatId}`)
+      console.log(`Bot removed from group ${chatId}`)
     } catch (error) {
-      console.error(`Ошибка при удалении группы ${chatId} из БД:`, error)
+      console.error(`Error removing group ${chatId} from database:`, error)
     }
   }
 })
@@ -194,7 +221,7 @@ bot.command("dare", async (ctx) => {
   })
 })
 
-// Обработка кнопок
+// Button handling
 bot.on("callback_query", async (ctx) => {
   const data = ctx.callbackQuery.data
   const userId = ctx.from?.id
@@ -224,9 +251,9 @@ bot.on("callback_query", async (ctx) => {
     })
     await ctx.answerCbQuery("Спасибо за ответ!")
   } catch (e) {
-    console.error("Ошибка при редактировании:", e)
+    console.error("Error editing message:", e)
   }
 })
 
 bot.launch()
-console.log("🤖 Бот запущен...")
+console.log("🤖 Bot started...")
