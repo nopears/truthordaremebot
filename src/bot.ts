@@ -1,11 +1,13 @@
 import { Telegraf, Markup } from "telegraf"
 import { GameService } from "./services/game.service"
 import { AdminService } from "./services/admin.service"
+import { GroupService } from "./services/group.service"
 
 const bot = new Telegraf(process.env.BOT_TOKEN!)
 const gameService = new GameService()
 const adminId = Number(process.env.ADMIN_ID)
 const adminService = new AdminService()
+const groupService = new GroupService()
 
 bot.on("message", async (ctx) => {
   // Только личные сообщения
@@ -62,10 +64,21 @@ bot.on("message", async (ctx) => {
         if (!id || !newText) return ctx.reply("❌ Укажите ID и новый текст")
         await adminService.editDare(id, newText)
         return ctx.reply('✅ Обновлено в "Действиях"')
+        
+      case "/list_groups":
+        const groups = await groupService.listGroups()
+        if (groups.length === 0) {
+          return ctx.reply("Бот не добавлен ни в одну группу")
+        }
+        const groupsList = groups.map((g) => {
+          const date = g.addedAt.toLocaleDateString('ru-RU')
+          return `ID: ${g.id}\nДобавлен: ${date}`
+        }).join("\n\n")
+        return ctx.reply(`📊 Список групп (${groups.length}):\n\n${groupsList}`)
 
       default:
         return ctx.reply(
-          "⚙ Команды:\n/list_truth\n/add_truth <текст>\n/edit_truth <id> <текст>\n/del_truth <id>\n\n/list_dare\n/add_dare <текст>\n/edit_dare <id> <текст>\n/del_dare <id>",
+          "⚙ Команды:\n/list_truth\n/add_truth <текст>\n/edit_truth <id> <текст>\n/del_truth <id>\n\n/list_dare\n/add_dare <текст>\n/edit_dare <id> <текст>\n/del_dare <id>\n\n/list_groups - список групп",
         )
     }
   } catch (e) {
@@ -74,26 +87,50 @@ bot.on("message", async (ctx) => {
   }
 })
 
-// Приветствие при добавлении в группу
+// Приветствие при добавлении в группу и обработка добавления/удаления бота из группы
 bot.on("my_chat_member", async (ctx) => {
   const update = ctx.update.my_chat_member
   const newStatus = update.new_chat_member.status
   const oldStatus = update.old_chat_member.status
+  const chatId = update.chat.id.toString()
 
+  // Если бота добавили в группу
   if (
     (oldStatus === "kicked" || oldStatus === "left") &&
     (newStatus === "member" || newStatus === "administrator")
   ) {
-    await ctx.reply(
-      `👋 Привет! Я *бот "Правда или Действие"*.
+    try {
+      // Сохраняем ID группы в базу данных
+      await groupService.addGroup(chatId)
+      console.log(`Бот добавлен в группу ${chatId}`)
+      
+      await ctx.reply(
+        `👋 Привет! Я *бот "Правда или Действие"*.
 
 Чтобы начать игру, ответь на сообщение участника в чате с помощью:
 /truth — задать вопрос
 /dare — выдать задание
 
 Удачи в игре! 🎉`,
-      { parse_mode: "Markdown" },
-    )
+        { parse_mode: "Markdown" },
+      )
+    } catch (error) {
+      console.error(`Ошибка при добавлении группы ${chatId} в БД:`, error)
+    }
+  }
+  
+  // Если бота удалили из группы
+  else if (
+    (oldStatus === "member" || oldStatus === "administrator") &&
+    (newStatus === "kicked" || newStatus === "left")
+  ) {
+    try {
+      // Удаляем ID группы из базы данных
+      await groupService.removeGroup(chatId)
+      console.log(`Бот удален из группы ${chatId}`)
+    } catch (error) {
+      console.error(`Ошибка при удалении группы ${chatId} из БД:`, error)
+    }
   }
 })
 

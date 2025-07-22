@@ -22,3 +22,8 @@ model Dare {
   id   Int    @id @default(autoincrement())
   text String
 }
+
+model Group {
+  id        String   @id
+  addedAt   DateTime @default(now())
+}
