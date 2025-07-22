@@ -1,0 +1,11 @@
+-- CreateTable
+CREATE TABLE "Truth" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "text" TEXT NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "Dare" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "text" TEXT NOT NULL
+);
