@@ -1,5 +1,0 @@
--- CreateTable
-CREATE TABLE "Group" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "addedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
